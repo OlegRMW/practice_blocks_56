@@ -1,0 +1,25 @@
+[project]
+name = "text-classification"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "OlegRMW",email = "zagudpev@mail.ru"}
+]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pandas (>=3.1.0,<4.0.0)",
+    "numpy (>=2.5.4,<3.0.0)",
+    "scikit-learn (>=1.9.1,<2.0.0)",
+    "nltk (>=3.10.4,<4.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "jupyterlab (>=4.6.4,<5.0.0)",
+    "ipykernel (>=7.4.0,<8.0.0)"
+]
