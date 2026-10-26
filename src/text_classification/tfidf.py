@@ -1,7 +1,7 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 
-def build_tfidf_features(train_texts, val_texts, test_texts, **vectorizer_params):
+def build_tfidf_features(train_texts, val_texts, test_texts=None, **vectorizer_params):
 
     params = {
         "analyzer": "word",
@@ -21,6 +21,7 @@ def build_tfidf_features(train_texts, val_texts, test_texts, **vectorizer_params
     features = {
         "X_train": vectorizer.fit_transform(train_texts),
         "X_val": vectorizer.transform(val_texts),
-        "X_test": vectorizer.transform(test_texts),
     }
+    if test_texts is not None:
+        features["X_test"] = vectorizer.transform(test_texts)
     return vectorizer, features

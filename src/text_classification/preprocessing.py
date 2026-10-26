@@ -2,6 +2,7 @@
 #========================================
 import re
 import html
+from functools import lru_cache
 
 from nltk.corpus import stopwords
 from nltk.stem import (
@@ -9,11 +10,15 @@ from nltk.stem import (
     PorterStemmer
 )
 
-stop_words = set(stopwords.words("english"))
 lemmatizer = WordNetLemmatizer()
 stemmer = PorterStemmer()
+
+
 # Отрицания оставляем
-stop_words -= {"no", "not", "nor"}
+@lru_cache(maxsize=1)
+def _get_stop_words():
+    return frozenset(stopwords.words("english")) - {"no", "not", "nor"}
+
 
 def preprocess_text(
     text,
@@ -48,6 +53,7 @@ def preprocess_text(
 
     # Удаление стоп-слов
     if remove_stopwords:
+        stop_words = _get_stop_words()
         tokens = [
             word for word in tokens
             if word.lower() not in stop_words
@@ -68,3 +74,18 @@ def preprocess_text(
         ]
 
     return " ".join(tokens)
+
+
+def prepare_text_frame(frame, versions):
+    """Add only the supplied preprocessing variants to a copy of one frame."""
+    prepared = frame.copy()
+    for name, params in versions.items():
+        prepared[name] = frame["text"].map(
+            lambda text: preprocess_text(text, **params)
+        )
+    return prepared
+
+
+def prepare_text_versions(train, test, versions):
+    """Prepare two frames using the same explicitly selected variants."""
+    return prepare_text_frame(train, versions), prepare_text_frame(test, versions)
