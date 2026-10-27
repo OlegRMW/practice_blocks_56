@@ -112,27 +112,3 @@ poetry run python scripts/evaluate.py --run-dir models/classic --versions v1_bas
 Для хранения нескольких экспериментов указывай отдельные `models_dir` и `reports_dir`.
 Загружай только собственные доверенные `.joblib`-файлы и используй то же Poetry-окружение.
 
-## Ноутбуки
-
-Открывай ноутбуки с рабочей директорией `notebooks/` и ядром Poetry `.venv`.
-В `main.ipynb` и `modern.ipynb` меняй `selected_versions` и `selected_models`;
-настройки читаются из того же YAML, запуск использует общий `run_classic_experiments`.
-После обучения `save_training_run` сохраняет модели и validation-отчёты.
-Следующая отдельная ячейка использует `evaluate_saved_models` для финальных test-отчётов.
-Исследовательские примеры BGE и fine-tuning DistilBERT также есть в `main.ipynb`.
-
-## Проверки
-
-```powershell
-poetry check --lock
-poetry run python -m pip check
-poetry run python -m unittest discover -s tests -v
-```
-
-Нейронные интеграционные тесты создают маленькие локальные модели и выполняют
-короткое обучение и сохранение/загрузку без скачивания весов. После полного
-`poetry install` все тесты должны выполняться без пропусков.
-
-Для проверки восстановления выполняй `poetry install` в чистой копии проекта
-без существующей `.venv`, затем команды выше. Проверка в уже установленном
-окружении подтверждает его работоспособность, но не заменяет чистую установку.
