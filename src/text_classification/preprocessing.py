@@ -24,13 +24,19 @@ def preprocess_text(
     text,
     remove_stopwords=False,
     normalization=None,
-    lowercase=True
+    lowercase=True,
+    mode="classic",
 ):
 
     if not isinstance(text, str):
         return ""
 
     text = html.unescape(text)
+    if mode == "minimal":
+        text = re.sub(r"\s+", " ", text).strip()
+        return text.lower() if lowercase else text
+    if mode != "classic":
+        raise ValueError("Preprocessing mode must be classic or minimal.")
 
     # Замена ссылок и упоминаний
     text = re.sub(r"https?://\S+|www\.\S+", " URL ", text)

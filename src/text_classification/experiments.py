@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 from copy import deepcopy
 import logging
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from text_classification.config import MODEL_LABELS, select_models, select_versions
+from text_classification.config import MODEL_KINDS, MODEL_LABELS, select_models, select_versions
 from text_classification.data import split_indices
 from text_classification.metrics import calculate_metrics
 from text_classification.models import train_gradient_boosting, train_logistic_regression
@@ -28,7 +29,7 @@ class ExperimentResult:
     config: dict
 
 
-def run_classic_experiments(train, config, version_names, model_names=None):
+def run_experiments(train, config, version_names, model_names=None):
     """Fit selected variants on train and compute validation predictions only."""
     versions = select_versions(config, version_names)
     models = select_models(config, model_names)
@@ -50,19 +51,35 @@ def run_classic_experiments(train, config, version_names, model_names=None):
     vectorizers, trained_models, datasets, results = {}, {}, {}, []
     for version in versions:
         logger.info("Version: %s", version)
-        vectorizer, features = build_tfidf_features(
-            prepared_train[version].iloc[train_idx],
-            prepared_train[version].iloc[val_idx],
-            **config["tfidf"],
-        )
-        vectorizers[version] = vectorizer
-        datasets[version] = features
+        train_texts = prepared_train[version].iloc[train_idx]
+        val_texts = prepared_train[version].iloc[val_idx]
+        features = {}
+        if any(MODEL_KINDS[name] == "tfidf" for name in models):
+            vectorizer, features = build_tfidf_features(train_texts, val_texts, **config["tfidf"])
+            vectorizers[version] = vectorizer
+            datasets[version] = features
         trained_models[version] = {}
         for model_name, params in models.items():
-            label, fit = MODEL_LABELS[model_name], trainers[model_name]
+            label, kind = MODEL_LABELS[model_name], MODEL_KINDS[model_name]
             logger.info("Training %s on %s", model_name, version)
-            model = fit(features["X_train"], y_train, seed=config["seed"], **params)
-            pred_val = model.predict(features["X_val"])
+            if kind == "tfidf":
+                model = trainers[model_name](features["X_train"], y_train, seed=config["seed"], **params)
+                pred_val = model.predict(features["X_val"])
+            elif kind == "bge":
+                from text_classification.neural import train_bge_classifier
+
+                model = train_bge_classifier(train_texts, y_train, seed=config["seed"], **params)
+                pred_val = model.predict(val_texts)
+                model.offload()
+            else:
+                from text_classification.neural import train_transformer_classifier
+
+                model = train_transformer_classifier(
+                    train_texts, y_train, val_texts, y_val, seed=config["seed"],
+                    work_dir=Path(config["models_dir"]) / ".training", **params,
+                )
+                pred_val = model.predict(val_texts)
+                model.offload()
             trained_models[version][label] = model
             results.append({
                 "version": version,
@@ -79,3 +96,8 @@ def run_classic_experiments(train, config, version_names, model_names=None):
         results_df, vectorizers, trained_models, datasets, train_idx, val_idx,
         train.iloc[val_idx][["id", "target"]].reset_index(drop=True).copy(), run_config,
     )
+
+
+def run_classic_experiments(train, config, version_names, model_names=None):
+    """Backward-compatible entry point for existing notebooks."""
+    return run_experiments(train, config, version_names, model_names)

@@ -29,6 +29,8 @@ def main(argv=None):
         results = evaluate_saved_models(args.run_dir, test, args.versions, args.models)
         output_dir = args.output_dir or Path(config["reports_dir"]) / "test"
         paths = save_prediction_reports(results, test["id"], output_dir)
+    except ImportError as error:
+        parser.exit(2, f"error: {error}\nInstall the project dependencies with poetry install.\n")
     except KeyError as error:
         parser.exit(2, f"error: Missing data/artifact field: {error}\n")
     except LookupError as error:

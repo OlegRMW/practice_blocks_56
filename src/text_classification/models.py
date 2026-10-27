@@ -38,7 +38,7 @@ def train_gradient_boosting(
 
 
 def evaluate_saved_models(run_dir, test, version_names=None, model_names=None):
-    """Predict test labels using saved preprocessing, TF-IDF, and classifiers."""
+    """Predict test labels using saved text preprocessing and model backends."""
     config, models_dir = load_training_run(run_dir)
     versions = select_versions(config, list(config["versions"]) if version_names is None else version_names)
     models = select_models(config, model_names)
@@ -60,7 +60,8 @@ def evaluate_saved_models(run_dir, test, version_names=None, model_names=None):
             processed[version] = test["text"].map(
                 lambda text: preprocess_text(text, **bundle["preprocessing"])
             )
-        features = bundle["vectorizer"].transform(processed[version])
+        features = (bundle["vectorizer"].transform(processed[version])
+                    if bundle.get("kind", "tfidf") == "tfidf" else processed[version])
         predictions = bundle["model"].predict(features)
         results.append({
             "version": version, "model": bundle["model_label"],

@@ -10,6 +10,12 @@ poetry install
 poetry run python -m nltk.downloader stopwords wordnet omw-1.4
 ```
 
+`pyproject.toml` и `poetry.lock` покрывают TF-IDF, BGE + Logistic Regression,
+fine-tuning DistilBERT, скрипты `train`/`evaluate`, тесты и Jupyter.
+Установи Python 3.12 и выполни `poetry install` — версии прямых и транзитивных
+зависимостей берутся из lock-файла. Сохраняй оба файла в Git.
+Ресурсы NLTK и предобученные веса Hugging Face скачиваются отдельно от Python-пакетов.
+
 ## Обучение выбранных вариантов
 
 Из корня проекта:
@@ -30,8 +36,38 @@ poetry run python scripts/train.py --config configs/classic.yaml --versions v3_l
 
 Версии из стандартного конфига: `v1_basic`, `v2_no_stopwords`, `v3_lemma`,
 `v4_lemma_no_stopwords`, `v5_stem`, `v6_original_case`.
-Модели: `logistic_regression`, `gradient_boosting`.
+Классические модели: `logistic_regression`, `gradient_boosting`.
 Повторяющиеся имена запускаются один раз; неизвестные имена вызывают ошибку до обработки данных.
+
+## BGE и fine-tuning DistilBERT
+
+Общие команды используют отдельный конфиг `configs/neural.yaml`:
+
+```powershell
+poetry run python scripts/train.py --config configs/neural.yaml --versions raw --models bge_logistic_regression
+poetry run python scripts/train.py --config configs/neural.yaml --versions raw --models distilbert
+```
+
+Чтобы обучить оба подхода в одном запуске, передай
+`--models bge_logistic_regression distilbert`. Вариант `raw` исправляет HTML-сущности
+и пробелы, сохраняя регистр, отрицания, пунктуацию и словоформы. Предобработка,
+имена моделей, batch size, параметры классификатора и `Trainer` задаются в YAML.
+Другие версии также можно объявить в этом конфиге и выбрать через `--versions`.
+
+BGE остаётся предобученным encoder: обучается Logistic Regression на его эмбеддингах.
+Для DistilBERT дообучаются все веса трансформера и слой классификации через `Trainer`.
+Разбиение train/validation и метрики одинаковы для всех подходов.
+Первый запуск скачивает веса с Hugging Face; для fine-tuning желательно использовать GPU.
+`device: cpu` принудительно выбирает CPU; `auto` использует доступное устройство.
+
+```powershell
+poetry run python scripts/evaluate.py --run-dir models/neural
+```
+
+После обучения encoder BGE и классификатор, либо DistilBERT и токенизатор,
+сохраняются локально. `evaluate` загружает эти файлы с `local_files_only=True`
+и не скачивает модель заново. Манифест описывает последний запуск в этой папке:
+для нескольких экспериментов используй разные `models_dir`/`reports_dir`.
 
 ## Предсказания на test по сохранённым моделям
 
@@ -40,7 +76,7 @@ poetry run python scripts/evaluate.py --run-dir models/classic
 ```
 
 `evaluate` загружает модели из последнего сохранённого запуска и создаёт финальные CSV
-для `test.csv`. Используются сохранённые параметры предобработки и TF-IDF; повторного
+для `test.csv`. Используются сохранённые параметры предобработки и соответствующий backend; повторного
 обучения нет. Исходный YAML и `train.csv` для этого шага не требуются.
 Можно выбрать часть сохранённых моделей и указать другой CSV:
 
@@ -62,6 +98,9 @@ poetry run python scripts/evaluate.py --run-dir models/classic --versions v1_bas
 - `models_dir/<версия>/<модель>.joblib` — параметры предобработки, обученный TF-IDF
   и классификатор. Для Gradient Boosting сохраняется также обученный SVD.
 - `models_dir/classic-run.yaml` — фактические настройки, версии библиотек и список моделей.
+- `models_dir/<версия>/<нейронная модель>/metadata.joblib` и `model/` — метаданные,
+  сохранённый encoder и классификатор BGE либо веса DistilBERT и токенизатор.
+  Имя манифеста `classic-run.yaml` сохранено для совместимости и используется для всех backend.
 - `reports_dir/validation/*_validation.csv` — `id,target,prediction`: правильный ответ и прогноз.
 - `reports_dir/validation/tfidf-validation-metrics.csv` — accuracy, precision, recall и F1.
 
@@ -80,10 +119,20 @@ poetry run python scripts/evaluate.py --run-dir models/classic --versions v1_bas
 настройки читаются из того же YAML, запуск использует общий `run_classic_experiments`.
 После обучения `save_training_run` сохраняет модели и validation-отчёты.
 Следующая отдельная ячейка использует `evaluate_saved_models` для финальных test-отчётов.
-Эксперименты BGE и fine-tuning DistilBERT находятся в отдельных разделах `main.ipynb`.
+Исследовательские примеры BGE и fine-tuning DistilBERT также есть в `main.ipynb`.
 
 ## Проверки
 
 ```powershell
+poetry check --lock
+poetry run python -m pip check
 poetry run python -m unittest discover -s tests -v
 ```
+
+Нейронные интеграционные тесты создают маленькие локальные модели и выполняют
+короткое обучение и сохранение/загрузку без скачивания весов. После полного
+`poetry install` все тесты должны выполняться без пропусков.
+
+Для проверки восстановления выполняй `poetry install` в чистой копии проекта
+без существующей `.venv`, затем команды выше. Проверка в уже установленном
+окружении подтверждает его работоспособность, но не заменяет чистую установку.

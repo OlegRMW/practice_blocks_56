@@ -8,8 +8,16 @@ import yaml
 MODEL_LABELS = {
     "logistic_regression": "Logistic Regression",
     "gradient_boosting": "Gradient Boosting",
+    "bge_logistic_regression": "BGE Logistic Regression",
+    "distilbert": "DistilBERT",
 }
 MODEL_NAMES = set(MODEL_LABELS)
+MODEL_KINDS = {
+    "logistic_regression": "tfidf",
+    "gradient_boosting": "tfidf",
+    "bge_logistic_regression": "bge",
+    "distilbert": "transformer",
+}
 
 
 def _mapping(value, name):
@@ -45,7 +53,7 @@ def load_config(path):
     versions = _mapping(config["versions"], "versions")
     if not versions:
         raise ValueError("versions must contain at least one preprocessing variant.")
-    allowed = {"remove_stopwords", "normalization", "lowercase"}
+    allowed = {"remove_stopwords", "normalization", "lowercase", "mode"}
     for name, params in versions.items():
         if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
             raise ValueError(f"Invalid preprocessing version name: {name!r}.")
@@ -58,6 +66,10 @@ def load_config(path):
                 raise ValueError(f"versions.{name}.{flag} must be true or false.")
         if params.get("normalization") not in (None, "lemma", "stem"):
             raise ValueError(f"versions.{name}.normalization must be null, lemma, or stem.")
+        if params.get("mode", "classic") not in {"classic", "minimal"}:
+            raise ValueError(f"versions.{name}.mode must be classic or minimal.")
+        if params.get("mode") == "minimal" and (params.get("remove_stopwords") or params.get("normalization")):
+            raise ValueError(f"versions.{name}: minimal mode preserves stopwords and word forms.")
 
     tfidf = _mapping(config["tfidf"], "tfidf")
     if "ngram_range" in tfidf:
@@ -70,7 +82,7 @@ def load_config(path):
 
     models = _mapping(config["models"], "models")
     if not models or models.keys() - MODEL_NAMES:
-        raise ValueError("models must contain logistic_regression and/or gradient_boosting.")
+        raise ValueError(f"models must contain one or more of: {', '.join(sorted(MODEL_NAMES))}.")
     for name, params in models.items():
         _mapping(params, f"models.{name}")
         if "random_state" in params or "seed" in params:
@@ -79,7 +91,37 @@ def load_config(path):
             value = params["svd_components"]
             if type(value) is not int or value < 1:
                 raise ValueError("models.gradient_boosting.svd_components must be positive.")
+        if name in {"bge_logistic_regression", "distilbert"}:
+            _validate_neural_params(name, params)
     return config
+
+
+def _validate_neural_params(name, params):
+    allowed = ({"encoder_name", "batch_size", "normalize_embeddings", "device", "classifier"}
+               if name == "bge_logistic_regression" else
+               {"model_name", "max_length", "inference_batch_size", "device", "training"})
+    unknown = params.keys() - allowed
+    if unknown:
+        raise ValueError(f"Unknown parameters for {name}: {', '.join(sorted(unknown))}.")
+    if params.get("device", "auto") not in {"auto", "cpu", "cuda"}:
+        raise ValueError(f"models.{name}.device must be auto, cpu, or cuda.")
+    for key in ("batch_size", "inference_batch_size", "max_length"):
+        if key in params and (type(params[key]) is not int or params[key] < 1):
+            raise ValueError(f"models.{name}.{key} must be a positive integer.")
+    source = "encoder_name" if name == "bge_logistic_regression" else "model_name"
+    if source in params and (not isinstance(params[source], str) or not params[source].strip()):
+        raise ValueError(f"models.{name}.{source} must be a nonempty model ID/path.")
+    if name == "bge_logistic_regression":
+        if "normalize_embeddings" in params and type(params["normalize_embeddings"]) is not bool:
+            raise ValueError("normalize_embeddings must be true or false.")
+        classifier = _mapping(params.get("classifier", {}), f"models.{name}.classifier")
+        if "random_state" in classifier:
+            raise ValueError("Use the top-level seed for the BGE classifier.")
+    else:
+        training = _mapping(params.get("training", {}), f"models.{name}.training")
+        reserved = {"output_dir", "seed", "data_seed", "report_to", "push_to_hub"} & training.keys()
+        if reserved:
+            raise ValueError(f"Training settings managed by the runner: {', '.join(sorted(reserved))}.")
 
 
 def _select(available, names, kind):

@@ -1,6 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
 import platform
+from importlib.metadata import PackageNotFoundError, version as package_version
 from uuid import uuid4
 
 import joblib
@@ -8,7 +9,7 @@ import numpy as np
 import sklearn
 import yaml
 
-from text_classification.config import MODEL_LABELS, load_config
+from text_classification.config import MODEL_KINDS, MODEL_LABELS, load_config
 from text_classification.reports import save_metrics, save_validation_reports
 
 
@@ -22,23 +23,36 @@ def save_training_run(experiment):
         "python": platform.python_version(), "scikit-learn": sklearn.__version__,
         "numpy": np.__version__, "joblib": joblib.__version__,
     }
+    for name in ("torch", "transformers", "sentence-transformers", "datasets", "accelerate"):
+        try:
+            libraries[name] = package_version(name)
+        except PackageNotFoundError:
+            pass
     artifacts = []
     for version in config["selected_versions"]:
         for name in config["selected_models"]:
             label = MODEL_LABELS[name]
-            relative_path = Path(version) / f"{name}.joblib"
+            kind = MODEL_KINDS[name]
+            relative_path = (Path(version) / f"{name}.joblib" if kind == "tfidf"
+                             else Path(version) / name / "metadata.joblib")
             path = models_dir / relative_path
             path.parent.mkdir(parents=True, exist_ok=True)
             bundle = {
                 "artifact_format": 1, "run_id": run_id, "version": version,
                 "model_name": name, "model_label": label,
                 "preprocessing": deepcopy(config["versions"][version]),
-                "vectorizer": experiment.vectorizers[version],
-                "model": experiment.trained_models[version][label],
+                "kind": kind,
                 "libraries": libraries,
             }
+            model = experiment.trained_models[version][label]
+            if kind == "tfidf":
+                bundle.update(vectorizer=experiment.vectorizers[version], model=model)
+            else:
+                model.save(path.parent / "model")
+                bundle["model_path"] = "model"
             joblib.dump(bundle, path, compress=3)
-            artifacts.append({"version": version, "model": name, "file": relative_path.as_posix()})
+            artifacts.append({"version": version, "model": name, "kind": kind,
+                              "file": relative_path.as_posix()})
 
     save_validation_reports(experiment.results_df, experiment.validation, validation_dir)
     save_metrics(experiment.results_df, validation_dir / "tfidf-validation-metrics.csv")
@@ -72,4 +86,14 @@ def load_model_bundle(entry, config, models_dir):
             or bundle.get("version") != entry["version"]
             or bundle.get("model_name") != entry["model"]):
         raise ValueError(f"Model artifact does not match the saved run: {path}.")
+    kind = bundle.get("kind", "tfidf")
+    if kind != MODEL_KINDS[entry["model"]]:
+        raise ValueError(f"Model kind does not match its manifest: {path}.")
+    if kind != "tfidf":
+        from text_classification.neural import load_neural_model
+
+        model_path = (path.parent / bundle["model_path"]).resolve()
+        if not model_path.is_relative_to(path.parent):
+            raise ValueError("Neural weights must be inside the artifact directory.")
+        bundle["model"] = load_neural_model(kind, model_path)
     return bundle

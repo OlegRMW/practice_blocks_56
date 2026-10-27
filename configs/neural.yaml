@@ -1,0 +1,42 @@
+seed: 42
+data_dir: ../data
+models_dir: ../models/neural
+reports_dir: ../data/reports/neural
+validation_size: 0.2
+
+# Preserve words, negations, punctuation, links, and case for pretrained models.
+versions:
+  raw:
+    mode: minimal
+    lowercase: false
+
+tfidf: {}
+
+models:
+  bge_logistic_regression:
+    encoder_name: BAAI/bge-base-en-v1.5
+    batch_size: 32
+    normalize_embeddings: true
+    device: auto
+    classifier:
+      max_iter: 1000
+      C: 1.0
+  distilbert:
+    model_name: distilbert/distilbert-base-uncased
+    max_length: 128
+    inference_batch_size: 16
+    device: auto
+    training:
+      learning_rate: 0.00002
+      per_device_train_batch_size: 8
+      per_device_eval_batch_size: 16
+      gradient_accumulation_steps: 2
+      num_train_epochs: 3
+      weight_decay: 0.01
+      warmup_steps: 100
+      eval_strategy: epoch
+      save_strategy: epoch
+      load_best_model_at_end: true
+      metric_for_best_model: f1
+      greater_is_better: true
+      save_total_limit: 2
