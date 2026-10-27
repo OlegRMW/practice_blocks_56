@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -63,3 +64,32 @@ def save_metrics(results, path):
     )
     _write_csv(metrics, path)
     return metrics
+
+
+def append_metrics_history(results, path, run_id):
+    """Append validation metrics for a completed training run without predictions."""
+    history = results[["version", "model", "accuracy", "precision", "recall", "f1"]].copy()
+    history["recorded_at"] = datetime.now(timezone.utc).isoformat()
+    history["run_id"] = run_id
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    history.to_csv(path, mode="a", header=not path.exists() or path.stat().st_size == 0, index=False)
+
+
+def save_metrics_ranking(history_paths, path, metric="f1"):
+    """Keep the latest result per preprocessing/model pair and rank descending."""
+    if metric not in {"accuracy", "precision", "recall", "f1"}:
+        raise ValueError(f"Unknown quality metric: {metric}.")
+    history_paths = list(history_paths)
+    if not history_paths:
+        raise ValueError("No metrics-history.csv files found. Run train.py first to collect metrics.")
+    history = pd.concat([pd.read_csv(source) for source in history_paths], ignore_index=True)
+    history["recorded_at"] = pd.to_datetime(history["recorded_at"], format="ISO8601", utc=True)
+    ranking = (
+        history.sort_values("recorded_at", kind="stable")
+        .drop_duplicates(subset=["version", "model"], keep="last")
+        .sort_values(metric, ascending=False, kind="stable")
+        .reset_index(drop=True)
+    )
+    _write_csv(ranking, path)
+    return ranking

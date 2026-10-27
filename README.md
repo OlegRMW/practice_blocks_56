@@ -75,6 +75,24 @@ poetry run python scripts/train.py --config configs/classic.yaml --versions v3_l
 Классические модели: `logistic_regression`, `gradient_boosting`.
 Повторяющиеся имена запускаются один раз; неизвестные имена вызывают ошибку до обработки данных.
 
+### Сводный отчёт по validation
+
+Каждый новый запуск `train` дописывает метрики в `validation/metrics-history.csv`
+внутри своего `reports_dir`, сохраняя время и идентификатор запуска. История начинается
+с запусков после добавления этой возможности; прежние перезаписанные результаты не восстанавливаются.
+
+```powershell
+poetry run python scripts/report.py
+```
+
+Скрипт собирает историю из `data/reports/` и вложенных папок, включая neural,
+оставляет последний результат каждой связки `version + model` и сортирует по F1
+по убыванию. Итог сохраняется в `data/reports/metrics-ranking.csv`; история сохраняется полностью.
+Другая метрика выбирается через `--metric accuracy`, `precision` или `recall`.
+Для отдельной папки используй `--reports-dir data/reports/neural`,
+для другого файла результата — `--output data/reports/comparison.csv`.
+Для сопоставимости результатов сохраняй одинаковые данные, seed и validation-разбиение.
+
 ### BGE и fine-tuning DistilBERT
 
 Общие команды используют отдельный конфиг `configs/neural.yaml`:
@@ -123,3 +141,13 @@ poetry run python scripts/evaluate.py --run-dir models/classic --versions v1_bas
 Без `--test` берётся `data_dir/test.csv` из сохранённого запуска.
 `--output-dir` позволяет изменить папку финальных отчётов.
 
+### Формирование отчёта по метрикам
+
+```powershell
+poetry run python scripts/report.py
+```
+
+Скрипт собирает накопленные validation-метрики classic и neural, оставляет последний
+результат каждой связки «предобработка + модель» и сортирует по F1 по убыванию.
+Отчёт сохраняется в `data/reports/metrics-ranking.csv`.
+Для другой метрики добавляем метки `--metric accuracy`, `--metric precision` или `--metric recall`.

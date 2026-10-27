@@ -10,7 +10,7 @@ import sklearn
 import yaml
 
 from text_classification.config import MODEL_KINDS, MODEL_LABELS, load_config
-from text_classification.reports import save_metrics, save_validation_reports
+from text_classification.reports import append_metrics_history, save_metrics, save_validation_reports
 
 
 def save_training_run(experiment):
@@ -60,6 +60,7 @@ def save_training_run(experiment):
     manifest = models_dir / "classic-run.yaml"
     with manifest.open("w", encoding="utf-8") as file:
         yaml.safe_dump(config, file, allow_unicode=True, sort_keys=False)
+    append_metrics_history(experiment.results_df, validation_dir / "metrics-history.csv", run_id)
     return manifest
 
 
