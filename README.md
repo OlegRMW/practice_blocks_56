@@ -48,6 +48,10 @@ poetry install
 poetry run python -m nltk.downloader stopwords wordnet omw-1.4
 ```
 
+### Создание папки с датасетами 
+
+В корневой директории требуется создать папку data и поместить туда train.csv и test.csv файлы с Kaggle. 
+
 ### Обучение выбранных вариантов
 
 Из корня проекта:
